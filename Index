@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>我的記帳 App</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet" />
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body { font-family: 'Noto Sans TC', sans-serif; background: #f8fafc; min-height: 100vh; }
+#app { max-width: 480px; margin: 0 auto; position: relative; min-height: 100vh; }
+
+#syncStatus { position: fixed; top: 10px; right: 10px; padding: 4px 10px; border-radius: 20px; font-size: 10px; font-weight: bold; color: white; z-index: 9999; }
+.status-syncing { background: #3b82f6; }
+.status-success { background: #22c55e; }
+.status-error { background: #ef4444; }
+
+/* 偵錯視窗樣式優化 */
+#debugLog { 
+  display: none; 
+  background: rgba(0, 0, 0, 0.9); 
+  color: #0f0; 
+  font-family: monospace; 
+  font-size: 10px; 
+  padding: 12px; 
+  margin: 10px; 
+  border-radius: 12px; 
+  max-height: 200px; 
+  overflow-y: auto; 
+  line-height: 1.4; 
+  border: 1px solid #333; 
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  cursor: pointer; /* 點擊可關閉的提示 */
+}
+#debugLog::before {
+  content: "點擊此處關閉偵錯視窗";
+  display: block;
+  color: #555;
+  font-size: 8px;
+  text-align: right;
+  margin-bottom: 4px;
+}
+
+.header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important; padding: 16px 20px 16px; }
+.header-date-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.hdr-arrow { background: rgba(255,255,255,0.1); border: none; border-radius: 8px; width: 32px; height: 32px; font-size: 18px; cursor: pointer; color: #fff; font-family: inherit; }
+.hdr-arrow.disabled { opacity: 0.3; cursor: default; }
+.hdr-date-center { text-align: center; flex: 1; }
+.hdr-date-label { color: #94a3b8; font-size: 11px; letter-spacing: 2px; margin-bottom: 4px; }
+.hdr-date-input { background: rgba(255,255,255,0.12); border: 1.5px solid rgba(255,255,255,0.2); border-radius: 10px; color: #fff; font-size: 16px; font-weight: 900; font-family: inherit; padding: 6px 14px; cursor: pointer; outline: none; }
+.hdr-date-input::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+.hdr-today-badge { display: inline-block; background: rgba(255,255,255,0.15); color: #94a3b8; font-size: 10px; border-radius: 4px; padding: 2px 8px; margin-top: 4px; cursor: pointer; border: none; font-family: inherit; }
+.hdr-net-row { text-align: center; margin-bottom: 12px; }
+.hdr-net-label { color: #94a3b8; font-size: 11px; margin-bottom: 2px; cursor: pointer; border-bottom: 1px dashed #444; display: inline-block; }
+.hdr-net-val { font-size: 30px; font-weight: 900; }
+.summary-bar { display: flex; gap: 6px; }
+.summary-item { flex: 1; background: rgba(255,255,255,0.07); border-radius: 10px; padding: 7px 8px; }
+.summary-item-label { font-size: 10px; font-weight: 700; margin-bottom: 2px; }
+.summary-item-val { color: #fff; font-size: 12px; font-weight: 700; }
+
+.nav { display: flex; background: #fff; border-bottom: 1.5px solid #f1f5f9; position: sticky; top: 0; z-index: 9; overflow-x: auto; }
+.nav-btn { flex: 1; padding: 10px 4px; font-size: 11px; background: none; border: none; border-bottom: 2.5px solid transparent; cursor: pointer; transition: all .15s; font-family: inherit; color: #94a3b8; font-weight: 500; white-space: nowrap; min-width: 56px; }
+.nav-btn.active { color: #0f172a; font-weight: 800; border-bottom-color: #0f172a; }
+
+.content { padding: 16px 16px 100px; }
+.tab { display: none; }
+.tab.active { display: block; }
+
+.type-selector { display: flex; gap: 8px; margin-bottom: 12px; }
+.type-btn { flex: 1; padding: 10px 0; border-radius: 12px; border: none; font-weight: 800; font-size: 13px; cursor: pointer; transition: all .15s; font-family: inherit; color: #64748b; background: #f1f5f9; }
+.type-btn.active-income { background: #22c55e !important; color: #fff !important; box-shadow: 0 4px 16px #22c55e55; }
+.type-btn.active-expense { background: #ef4444 !important; color: #fff !important; box-shadow: 0 4px 16px #ef444455; }
+.type-btn.active-daily { background: #f59e0b !important; color: #fff !important; box-shadow: 0 4px 16px #f59e0b55; }
+
+.mode-toggle { display: flex; background: #f1f5f9; border-radius: 10px; padding: 3px; margin-bottom: 16px; }
+.mode-btn { flex: 1; padding: 8px 0; border-radius: 8px; border: none; font-weight: 700; font-size: 13px; cursor: pointer; transition: all .15s; font-family: inherit; color: #94a3b8; background: none; }
+.mode-btn.active { background: #fff; color: #0f172a; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+
+.product-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+.product-btn { padding: 14px 8px; border-radius: 12px; border: 2px solid #e2e8f0; background: #fff; cursor: pointer; text-align: center; transition: all .15s; font-family: inherit; font-weight: 800; font-size: 14px; color: #1e293b; }
+.product-btn.selected-income { border-color: #22c55e; background: #dcfce7; color: #22c55e; }
+.product-btn.selected-expense { border-color: #ef4444; background: #fee2e2; color: #ef4444; }
+.product-btn.selected-daily { border-color: #f59e0b; background: #fef3c7; color: #f59e0b; }
+
+.price-card { background: #fff; border-radius: 16px; padding: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.07); margin-bottom: 16px; }
+.price-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.price-card-title { font-weight: 900; font-size: 16px; color: #0f172a; }
+.close-btn { color: #cbd5e1; background: none; border: none; cursor: pointer; font-size: 18px; line-height: 1; }
+.price-label { font-size: 11px; color: #94a3b8; margin-bottom: 6px; letter-spacing: 1px; }
+.price-input { width: 100%; padding: 14px 16px; border-radius: 12px; font-size: 28px; font-weight: 900; color: #0f172a; box-sizing: border-box; outline: none; text-align: right; font-family: inherit; }
+.price-input-income { border: 2px solid #22c55e; }
+.price-input-expense { border: 2px solid #ef4444; }
+.price-input-daily { border: 2px solid #f59e0b; }
+.quick-prices { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+.quick-price-btn { padding: 6px 12px; border-radius: 8px; border: 1.5px solid #e2e8f0; background: #f8fafc; color: #64748b; font-weight: 700; font-size: 13px; cursor: pointer; font-family: inherit; }
+.quick-price-btn.active-income { border-color: #22c55e; background: #dcfce7; color: #22c55e; }
+.quick-price-btn.active-expense { border-color: #ef4444; background: #fee2e2; color: #ef4444; }
+.quick-price-btn.active-daily { border-color: #f59e0b; background: #fef3c7; color: #f59e0b; }
+.qty-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.qty-label { font-size: 13px; color: #64748b; font-weight: 600; white-space: nowrap; }
+.qty-btn { width: 40px; height: 40px; border-radius: 10px; border: 1.5px solid #e2e8f0; background: #f8fafc; font-size: 20px; cursor: pointer; font-weight: 700; color: #374151; font-family: inherit; }
+.qty-input { flex: 1; padding: 8px 0; border-radius: 10px; border: 1.5px solid #e2e8f0; font-size: 18px; font-weight: 800; text-align: center; font-family: inherit; }
+.subtotal { border-radius: 10px; padding: 10px 14px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+.subtotal-label { color: #64748b; font-size: 13px; }
+.subtotal-val { font-weight: 900; font-size: 20px; }
+.note-input { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1.5px solid #e2e8f0; font-size: 13px; color: #374151; box-sizing: border-box; font-family: inherit; }
+
+.manual-card { background: #fff; border-radius: 16px; padding: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.07); margin-bottom: 16px; }
+.field-label { font-size: 11px; color: #94a3b8; margin-bottom: 4px; }
+.text-input { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1.5px solid #e2e8f0; font-size: 14px; box-sizing: border-box; font-family: inherit; }
+.row-2 { display: flex; gap: 10px; margin-bottom: 10px; }
+.add-btn { width: 100%; padding: 15px 0; border-radius: 14px; border: none; color: #fff; font-size: 16px; font-weight: 900; cursor: pointer; letter-spacing: 1px; font-family: inherit; margin-bottom: 12px; }
+.add-btn-income { background: linear-gradient(135deg, #22c55e, #16a34a); box-shadow: 0 6px 20px #22c55e55; }
+.add-btn-expense { background: linear-gradient(135deg, #ef4444, #dc2626); box-shadow: 0 6px 20px #ef444455; }
+.add-btn-daily { background: linear-gradient(135deg, #f59e0b, #d97706); box-shadow: 0 6px 20px #f59e0b55; }
+
+.summary-card { background: #fff; border-radius: 16px; padding: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); margin-bottom: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.summary-net { grid-column: 1/-1; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; margin-bottom: 4px; }
+.summary-net-label { color: #94a3b8; font-size: 11px; }
+.summary-net-val { font-size: 24px; font-weight: 900; }
+.summary-sub-label { color: #94a3b8; font-size: 11px; }
+.summary-sub-val { font-weight: 800; }
+.summary-daily { grid-column: 1/-1; }
+.record-list { display: flex; flex-direction: column; gap: 8px; }
+.record-item { background: #fff; border-radius: 14px; padding: 12px 14px; box-shadow: 0 1px 6px rgba(0,0,0,0.06); display: flex; align-items: center; gap: 12px; }
+.record-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.record-info { flex: 1; min-width: 0; }
+.record-name { font-weight: 800; font-size: 14px; color: #1e293b; }
+.record-meta { font-size: 12px; color: #94a3b8; }
+.record-amount { text-align: right; flex-shrink: 0; }
+.record-val { font-weight: 900; font-size: 15px; }
+.record-del { font-size: 11px; color: #cbd5e1; background: none; border: none; cursor: pointer; padding: 0; margin-top: 2px; font-family: inherit; display: block; }
+.empty-msg { text-align: center; color: #94a3b8; padding: 40px; }
+
+.prod-add-card { background: #fff; border-radius: 16px; padding: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); margin-bottom: 16px; }
+.prod-add-title { font-weight: 800; font-size: 14px; margin-bottom: 10px; color: #0f172a; }
+.prod-type-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.prod-type-btn { flex: 1; padding: 7px 0; border-radius: 8px; border: 1.5px solid #e2e8f0; background: #fff; color: #94a3b8; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.prod-type-btn.active-income { border-color: #22c55e; background: #dcfce7; color: #22c55e; }
+.prod-type-btn.active-expense { border-color: #ef4444; background: #fee2e2; color: #ef4444; }
+.prod-type-btn.active-daily { border-color: #f59e0b; background: #fef3c7; color: #f59e0b; }
+.prod-add-btn { width: 100%; padding: 10px; border-radius: 10px; border: none; background: #0f172a; color: #fff; font-weight: 800; font-size: 14px; cursor: pointer; font-family: inherit; }
+.prod-section { margin-bottom: 16px; }
+.prod-section-title { font-weight: 800; font-size: 13px; margin-bottom: 8px; }
+.prod-list { display: flex; flex-direction: column; gap: 6px; }
+.prod-item { background: #fff; border-radius: 12px; padding: 10px 14px; display: flex; align-items: center; box-shadow: 0 1px 4px rgba(0,0,0,0.05); gap: 8px; }
+.prod-item-name { flex: 1; font-weight: 700; font-size: 14px; color: #1e293b; }
+.prod-item-hint { color: #cbd5e1; font-size: 12px; margin-right: 4px; }
+.prod-del-btn { color: #cbd5e1; background: none; border: none; cursor: pointer; font-size: 14px; font-family: inherit; }
+.prod-edit-btn { color: #94a3b8; background: none; border: none; cursor: pointer; font-size: 13px; font-family: inherit; padding: 2px 6px; border-radius: 6px; }
+.prod-edit-btn:hover { background: #f1f5f9; color: #0f172a; }
+.prod-item-price { color: #64748b; font-size: 12px; font-weight: 600; min-width: 48px; text-align: right; }
+/* 編輯模式 */
+.prod-item.editing { background: #f8fafc; border: 1.5px solid #cbd5e1; padding: 8px 10px; flex-wrap: wrap; gap: 6px; }
+.prod-edit-name { flex: 1; min-width: 80px; padding: 6px 8px; border-radius: 8px; border: 1.5px solid #e2e8f0; font-size: 14px; font-weight: 700; font-family: inherit; color: #1e293b; }
+.prod-edit-price { width: 80px; padding: 6px 8px; border-radius: 8px; border: 1.5px solid #e2e8f0; font-size: 14px; font-family: inherit; color: #1e293b; text-align: right; }
+.prod-edit-actions { display: flex; gap: 6px; width: 100%; }
+.prod-save-btn { flex: 1; padding: 7px 0; border-radius: 8px; border: none; background: #0f172a; color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.prod-cancel-btn { padding: 7px 14px; border-radius: 8px; border: 1.5px solid #e2e8f0; background: #fff; color: #64748b; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
+
+.month-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; background: #fff; border-radius: 12px; padding: 10px 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.month-arrow { background: #f1f5f9; border: none; border-radius: 8px; width: 32px; height: 32px; font-size: 16px; cursor: pointer; color: #374151; font-family: inherit; }
+.month-arrow.disabled { opacity: 0.3; cursor: default; }
+.month-label { flex: 1; text-align: center; font-weight: 900; font-size: 16px; color: #0f172a; }
+.month-summary { background: linear-gradient(135deg, #1e293b, #0f172a); border-radius: 16px; padding: 16px; margin-bottom: 14px; }
+.month-net-label { color: #94a3b8; font-size: 11px; text-align: center; margin-bottom: 4px; }
+.month-net-val { font-size: 32px; font-weight: 900; text-align: center; margin-bottom: 14px; }
+.month-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.month-grid-item { background: rgba(255,255,255,0.07); border-radius: 10px; padding: 8px 10px; }
+.month-grid-label { font-size: 10px; font-weight: 700; margin-bottom: 4px; }
+.month-grid-val { color: #fff; font-size: 13px; font-weight: 700; }
+.month-day-list { display: flex; flex-direction: column; gap: 6px; }
+.month-day-item { background: #fff; border-radius: 12px; padding: 12px 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); cursor: pointer; }
+.month-day-item:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+.month-day-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.month-day-date { font-weight: 800; font-size: 14px; color: #1e293b; }
+.month-day-net { font-weight: 900; font-size: 15px; }
+.month-day-bar { display: flex; gap: 6px; flex-wrap: wrap; }
+.month-day-bar-item { font-size: 11px; color: #94a3b8; }
+.month-day-bar-item.income { color: #22c55e; }
+.month-day-bar-item.expense { color: #ef4444; }
+.month-day-bar-item.daily { color: #f59e0b; }
+.month-empty { text-align: center; color: #94a3b8; padding: 40px; }
+
+#toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #0f172a; color: #fff; padding: 10px 24px; border-radius: 100px; font-weight: 700; font-size: 14px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); z-index: 999; white-space: nowrap; display: none; }
+</style>
+</head>
+<body>
+<div id="syncStatus" class="status-syncing">同步中...</div>
+<div id="app">
+<div class="header">
+<div class="header-date-nav">
+<button class="hdr-arrow" onclick="shiftDate(-1)">‹</button>
+<div class="hdr-date-center">
+<div class="hdr-date-label">選擇日期</div>
+<input type="date" class="hdr-date-input" id="hdrDateInput" onchange="setDate(this.value)" />
+<div><button class="hdr-today-badge" id="hdrTodayBadge" style="display:none" onclick="setDate(todayISO())">回到今天</button></div>
+</div>
+<button class="hdr-arrow disabled" id="hdrNextBtn" onclick="shiftDate(1)">›</button>
+</div>
+<div class="hdr-net-row">
+<!-- 修改點：點擊觸發切換顯示/隱藏 -->
+<div class="hdr-net-label" onclick="toggleDebugLog()">當日盈餘</div>
+<div class="hdr-net-val" id="headerNet"></div>
+</div>
+<div class="summary-bar">
+<div class="summary-item">
+<div class="summary-item-label" style="color:#4ade80">↑ 收入</div>
+<div class="summary-item-val" id="hdrIncome">NT$0</div>
+</div>
+<div class="summary-item">
+<div class="summary-item-label" style="color:#f87171">↓ 進貨</div>
+<div class="summary-item-val" id="hdrExpense">NT$0</div>
+</div>
+<div class="summary-item">
+<div class="summary-item-label" style="color:#fbbf24">◆ 費用</div>
+<div class="summary-item-val" id="hdrDaily">NT$0</div>
+</div>
+<div class="summary-item">
+<div class="summary-item-label" style="color:#a78bfa">= 盈餘</div>
+<div class="summary-item-val" id="hdrNet2">NT$0</div>
+</div>
+</div>
+</div>
+
+<div class="nav">
+<button class="nav-btn active" onclick="switchTab('record')">⚡ 記帳</button>
+<button class="nav-btn" onclick="switchTab('history')">📋 帳目</button>
+<button class="nav-btn" onclick="switchTab('products')">📦 品項</button>
+<button class="nav-btn" onclick="switchTab('monthly')">月報</button>
+</div>
+
+<!-- 修改點：增加點擊自身關閉功能 -->
+<div id="debugLog" onclick="toggleDebugLog()"></div>
+
+<div class="content">
+<div id="tab-record" class="tab active">
+<div class="type-selector">
+<button class="type-btn active-income" onclick="setRecType('income')">收入</button>
+<button class="type-btn" onclick="setRecType('expense')">進貨</button>
+<button class="type-btn" onclick="setRecType('daily')">費用</button>
+</div>
+
+<div class="mode-toggle">
+<button class="mode-btn active" onclick="setMode('quick')">快速記帳</button>
+<button class="mode-btn" onclick="setMode('manual')">手動輸入</button>
+</div>
+
+<div id="quick-mode">
+<div class="product-grid" id="productGrid"></div>
+<div id="priceCard" style="display:none"></div>
+</div>
+
+<div id="manual-mode" style="display:none">
+<div class="manual-card">
+<div style="margin-bottom:10px">
+<div class="field-label">品名</div>
+<input type="text" class="text-input" id="manualName" placeholder="輸入品名" />
+</div>
+<div class="row-2">
+<div style="flex:1">
+<div class="field-label">金額 (NT$)</div>
+<input type="number" class="text-input" id="manualPrice" placeholder="輸入金額" inputmode="numeric" />
+</div>
+<div style="width:100px">
+<div class="field-label">數量</div>
+<input type="number" class="text-input" id="manualQty" value="1" inputmode="numeric" />
+</div>
+</div>
+<div>
+<div class="field-label">備註</div>
+<input type="text" class="text-input" id="manualNote" placeholder="選填" />
+</div>
+</div>
+</div>
+
+<button class="add-btn add-btn-income" id="addBtn" onclick="addRecord()">記帳 ↑</button>
+</div>
+
+<div id="tab-history" class="tab">
+<div class="summary-card">
+<div class="summary-net">
+<div class="summary-net-label">當日盈餘</div>
+<div class="summary-net-val" id="histNet"></div>
+</div>
+<div>
+<div class="summary-sub-label" style="color:#4ade80">↑ 收入</div>
+<div class="summary-sub-val" id="histIncome"></div>
+</div>
+<div>
+<div class="summary-sub-label" style="color:#f87171">↓ 進貨</div>
+<div class="summary-sub-val" id="histExpense"></div>
+</div>
+<div class="summary-daily">
+<div class="summary-sub-label" style="color:#fbbf24">◆ 費用</div>
+<div class="summary-sub-val" id="histDaily"></div>
+</div>
+</div>
+<div class="record-list" id="recordList"></div>
+</div>
+
+<div id="tab-products" class="tab">
+<div class="prod-add-card">
+<div class="prod-add-title">新增品項</div>
+<div class="prod-type-row">
+<button class="prod-type-btn active-income" onclick="setProdType('income')">收入</button>
+<button class="prod-type-btn" onclick="setProdType('expense')">進貨</button>
+<button class="prod-type-btn" onclick="setProdType('daily')">費用</button>
+</div>
+<input type="text" class="text-input" id="newProdName" placeholder="輸入品項名稱" style="margin-bottom:8px" />
+<div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
+  <div style="flex:1">
+    <div class="field-label">預設金額（選填）</div>
+    <input type="number" class="text-input" id="newProdPrice" placeholder="例如：200" inputmode="numeric" />
+  </div>
+</div>
+<button class="prod-add-btn" onclick="addProduct()">新增</button>
+</div>
+<div id="productSections"></div>
+</div>
+
+<div id="tab-monthly" class="tab">
+<div class="month-nav">
+<button class="month-arrow" onclick="shiftMonth(-1)">‹</button>
+<div class="month-label" id="monthLabel"></div>
+<button class="month-arrow disabled" id="monthNextBtn" onclick="shiftMonth(1)">›</button>
+</div>
+<div class="month-summary">
+<div class="month-net-label">本月盈餘</div>
+<div class="month-net-val" id="monthNet"></div>
+<div class="month-grid">
+<div class="month-grid-item">
+<div class="month-grid-label" style="color:#4ade80">↑ 收入</div>
+<div class="month-grid-val" id="monthIncome"></div>
+</div>
+<div class="month-grid-item">
+<div class="month-grid-label" style="color:#f87171">↓ 進貨</div>
+<div class="month-grid-val" id="monthExpense"></div>
+</div>
+<div class="month-grid-item">
+<div class="month-grid-label" style="color:#fbbf24">◆ 費用</div>
+<div class="month-grid-val" id="monthDaily"></div>
+</div>
+</div>
+</div>
+<div class="month-day-list" id="monthDayList"></div>
+</div>
+</div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ============================================
+// 全局變數
+// ============================================
+const API_URL = 'https://script.google.com/macros/s/AKfycby5gZUF-K2QMXq7r5RP2W3onCNp-yCR1nesACY9kjguQFMKkHQsCdLcouDUjpLM01VsMA/exec'; // 請務必替換為您的 GAS 網址
+let records = [];
+let products = {
+  income: [],
+  expense: [],
+  daily: []
+};
+let sharedDateStr;
+let recType = 'income';
+let recMode = 'quick';
+let selectedProduct = null;
+let customPrice = '';
+let qty = 1;
+let newProdType = 'income';
+let isCloudLoaded = false;
+let monthStr;
+
+const CATS = {
+  income: { label: '收入', icon: '↑', color: '#22c55e', bg: '#dcfce7' },
+  expense: { label: '進貨', icon: '↓', color: '#ef4444', bg: '#fee2e2' },
+  daily: { label: '費用', icon: '◆', color: '#f59e0b', bg: '#fef3c7' }
+};
+
+// ============================================
+// 工具函數
+// ============================================
+function log(msg) {
+  const debugLog = document.getElementById('debugLog');
+  if (debugLog) {
+    debugLog.innerHTML += `<div>${new Date().toLocaleTimeString()} - ${msg}</div>`;
+    debugLog.scrollTop = debugLog.scrollHeight;
+  }
+  console.log(msg);
+}
+
+// 修改點：切換偵錯視窗顯示/隱藏
+function toggleDebugLog() {
+  const el = document.getElementById('debugLog');
+  if (el.style.display === 'block') {
+    el.style.display = 'none';
+  } else {
+    el.style.display = 'block';
+    el.scrollTop = el.scrollHeight;
+  }
+}
+
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.style.display = 'block';
+  setTimeout(() => {
+    toast.style.display = 'none';
+  }, 2000);
+}
+
+function todayISO() {
+  const d = new Date();
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+function pad(num) {
+  return num < 10 ? '0' + num : num;
+}
+
+function formatMoney(amount) {
+  return `NT$${Math.abs(amount).toLocaleString()}`;
+}
+
+function normalizeDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
+}
+
+function isoToDisplay(isoDate) {
+  if (!isoDate) return '';
+  const [y, m, d] = isoDate.split('-');
+  return `${y}/${m}/${d}`;
+}
+
+function displayToYearMonth(displayDate) {
+  if (!displayDate) return '';
+  const [y, m] = displayDate.split('/');
+  return `${y}-${m}`;
+}
+
+function setSyncStatus(status, text) {
+  const el = document.getElementById('syncStatus');
+  el.className = `status-${status}`;
+  el.textContent = text;
+}
+
+function mergeRecords(local, cloud) {
+  const map = new Map();
+  local.forEach(r => {
+    r.date = normalizeDate(r.date);
+    map.set(r.id, r);
+  });
+  cloud.forEach(r => {
+    r.date = normalizeDate(r.date);
+    map.set(r.id, r);
+  });
+  return Array.from(map.values()).sort((a, b) => b.id - a.id);
+}
+
+// ============================================
+// ☁️ 雲端同步
+// ============================================
+
+async function uploadToCloud(force = false) {
+  if (!isCloudLoaded && !force) {
+    log('⚠️ 雲端未完全載入，跳過上傳');
+    return;
+  }
+  setSyncStatus('syncing', '正在上傳...');
+  try {
+    const payload = { records: records, products: products };
+    const formData = new FormData();
+    formData.append('json', JSON.stringify(payload));
+    await fetch(API_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      body: formData
+    });
+    setSyncStatus('success', '已同步');
+    log('✓ 上傳成功：' + records.length + ' 筆帳目, ' + Object.values(products).flat().length + ' 個品項');
+  } catch(e) {
+    setSyncStatus('error', '上傳失敗');
+    log('✗ 上傳失敗：' + e.toString());
+  }
+}
+
+function loadFromCloud() {
+  log("🔄 正在從雲端下載完整資料...");
+  setSyncStatus('syncing', '正在下載...');
+
+  const callbackName = 'jsonp_callback_' + Math.floor(Math.random() * 1000000);
+  
+  window[callbackName] = function(cloudData) {
+    try {
+      log("📥 收到雲端數據：" + JSON.stringify(cloudData).substring(0, 100));
+      
+      if (cloudData && cloudData.records && Array.isArray(cloudData.records)) {
+        records = mergeRecords(records, cloudData.records);
+        log(`✓ 帳目同步成功！總筆數: ${records.length}`);
+        localStorage.setItem('bk_records', JSON.stringify(records));
+      } else {
+        log("⚠️ 無帳目數據");
+      }
+      
+      if (cloudData && cloudData.products) {
+        products = {
+          income: cloudData.products.income || [],
+          expense: cloudData.products.expense || [],
+          daily: cloudData.products.daily || []
+        };
+        
+        const prodCount = Object.values(products).flat().length;
+        log(`✓ 品項同步成功！總數: ${prodCount}`);
+        localStorage.setItem('bk_products', JSON.stringify(products));
+      } else {
+        log("⚠️ 無品項數據");
+      }
+    } catch (e) {
+      log('✗ 處理資料失敗：' + e.toString());
+    }
+    
+    delete window[callbackName];
+    const script = document.getElementById(callbackName);
+    if (script) script.remove();
+    
+    log("🔄 正在重新渲染...");
+    setTimeout(() => {
+      renderProductGrid(); 
+      renderProductSections();
+      updateHeader();
+      renderHistory();
+      renderMonthly();
+      log("✓ 渲染完成");
+    }, 100);
+    
+    setSyncStatus('success', '雲端已同步');
+    showToast("✓ 雲端資料已同步");
+    isCloudLoaded = true;
+  };
+
+  const script = document.createElement('script');
+  script.id = callbackName;
+  script.src = `${API_URL}?callback=${callbackName}&t=${Date.now()}`;
+  script.onerror = function() {
+    log("✗ 雲端連線失敗");
+    setSyncStatus('error', '同步失敗');
+    delete window[callbackName];
+    isCloudLoaded = true;
+  };
+  document.body.appendChild(script);
+}
+
+function saveData() {
+  try {
+    localStorage.setItem('bk_records', JSON.stringify(records));
+    localStorage.setItem('bk_products', JSON.stringify(products));
+    log('✓ 本地儲存完成');
+    uploadToCloud(); 
+  } catch(e) {
+    log('✗ 儲存失敗：' + e.toString());
+  }
+}
+
+function loadData() {
+  try {
+    const r = localStorage.getItem('bk_records');
+    const p = localStorage.getItem('bk_products');
+    if (r) {
+      records = JSON.parse(r);
+      records.forEach(rec => rec.date = normalizeDate(rec.date));
+      log('✓ 讀取本地帳目：' + records.length + ' 筆');
+    }
+    if (p) {
+      products = JSON.parse(p);
+      log('✓ 讀取本地品項：' + Object.values(products).flat().length + ' 個');
+    }
+  } catch(e) {
+    log('✗ 讀取失敗：' + e.toString());
+  }
+}
+
+// ============================================
+// 📅 日期管理
+// ============================================
+
+function setDate(iso) {
+  sharedDateStr = iso;
+  const isToday = iso === todayISO();
+  document.getElementById('hdrDateInput').value = iso;
+  document.getElementById('hdrTodayBadge').style.display = isToday ? 'none' : 'inline-block';
+  document.getElementById('hdrNextBtn').className = isToday ? 'hdr-arrow disabled' : 'hdr-arrow';
+  updateHeader(); 
+  renderHistory();
+}
+
+function shiftDate(delta) {
+  if (delta > 0 && sharedDateStr === todayISO()) return;
+  const d = new Date(sharedDateStr);
+  d.setDate(d.getDate() + delta);
+  setDate(d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()));
+}
+
+// ============================================
+// 🗂️ 標籤頁管理
+// ============================================
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  const idx = {record:0, history:1, products:2, monthly:3}[name];
+  document.querySelectorAll('.nav-btn')[idx].classList.add('active');
+  if (name === 'history') renderHistory();
+  if (name === 'monthly') renderMonthly();
+  if (name === 'products') renderProductSections();
+}
+
+// ============================================
+// 💰 記帳功能
+// ============================================
+
+function setRecType(type) {
+  recType = type; 
+  selectedProduct = null; 
+  customPrice = ''; 
+  qty = 1;
+  document.querySelectorAll('.type-btn').forEach(b => b.className = 'type-btn');
+  document.querySelectorAll('.type-btn')[{income:0,expense:1,daily:2}[type]].className = `type-btn active-${type}`;
+  updateAddBtn(); 
+  renderProductGrid(); 
+  hidePriceCard();
+}
+
+function setMode(m) {
+  recMode = m; 
+  selectedProduct = null; 
+  qty = 1; 
+  customPrice = '';
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.mode-btn')[m==='quick'?0:1].classList.add('active');
+  document.getElementById('quick-mode').style.display = m==='quick'?'block':'none';
+  document.getElementById('manual-mode').style.display = m==='manual'?'block':'none';
+  hidePriceCard();
+}
+
+function renderProductGrid() {
+  const grid = document.getElementById('productGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  if (!products[recType]) return;
+  products[recType].forEach(p => {
+    if (!p || !p.name) return;
+    const btn = document.createElement('button');
+    btn.className = selectedProduct && selectedProduct.id===p.id ? `product-btn selected-${recType}` : 'product-btn';
+    btn.innerHTML = p.defaultPrice != null 
+      ? `${p.name}<br><span style="font-size:11px;font-weight:600;opacity:0.7">NT$${p.defaultPrice.toLocaleString()}</span>`
+      : p.name;
+    btn.onclick = () => selectProduct(p);
+    grid.appendChild(btn);
+  });
+}
+
+function selectProduct(p) { 
+  selectedProduct=p; 
+  customPrice = p.defaultPrice != null ? String(p.defaultPrice) : '';
+  qty=1; 
+  renderProductGrid(); 
+  renderPriceCard(); 
+}
+
+function hidePriceCard() { 
+  const c=document.getElementById('priceCard'); 
+  c.style.display='none'; 
+  c.innerHTML=''; 
+}
+
+function renderPriceCard() {
+  if (!selectedProduct) return hidePriceCard();
+  const cat = CATS[recType];
+  const card = document.getElementById('priceCard');
+  card.style.display = 'block';
+  card.innerHTML = `
+<div class="price-card">
+<div class="price-card-header">
+<div class="price-card-title">${selectedProduct.name}</div>
+<button class="close-btn" onclick="clearSelection()">✕</button>
+</div>
+<div style="margin-bottom:14px">
+<div class="price-label">單價 (NT$)</div>
+<input class="price-input price-input-${recType}" id="priceInput" type="number" placeholder="輸入金額" inputmode="numeric" value="${customPrice}" oninput="onPriceInput(this.value)" autofocus />
+</div>
+<div class="quick-prices">
+${[100,200,500,1000,2000,5000].map(v=>`<button class="quick-price-btn ${customPrice==v?'active-'+recType:''}" onclick="setQuickPrice(${v})">${v.toLocaleString()}</button>`).join('')}
+</div>
+<div class="qty-row">
+<span class="qty-label">數量</span>
+<button class="qty-btn" onclick="changeQty(-1)">−</button>
+<input class="qty-input" id="qtyInput" type="number" value="${qty}" inputmode="numeric" onchange="syncQty(this.value)" />
+<button class="qty-btn" onclick="changeQty(1)">+</button>
+</div>
+<div class="subtotal" style="background:${cat.bg}">
+<span class="subtotal-label">小計</span>
+<span class="subtotal-val" style="color:${cat.color}" id="subtotalVal">${formatMoney((parseFloat(customPrice)||0)*qty)}</span>
+</div>
+<input class="note-input" id="quickNote" placeholder="備註（選填）" />
+</div>`;
+}
+
+function clearSelection() { 
+  selectedProduct=null; 
+  customPrice=''; 
+  qty=1; 
+  renderProductGrid(); 
+  hidePriceCard(); 
+}
+
+function onPriceInput(val) { 
+  customPrice=val; 
+  updateSubtotal(); 
+  updateQuickPriceBtns(); 
+}
+
+function setQuickPrice(val) { 
+  customPrice=String(val); 
+  document.getElementById('priceInput').value=customPrice; 
+  updateSubtotal(); 
+  updateQuickPriceBtns(); 
+}
+
+function updateQuickPriceBtns() {
+  document.querySelectorAll('.quick-price-btn').forEach(btn => {
+    btn.className = `quick-price-btn ${customPrice==btn.textContent.replace(/,/g,'')?'active-'+recType:''}`;
+  });
+}
+
+function changeQty(delta) {
+  qty = Math.max(1, qty+delta);
+  const inp = document.getElementById('qtyInput') || document.getElementById('manualQty');
+  if (inp) inp.value = qty;
+  updateSubtotal();
+}
+
+function syncQty(val) { 
+  qty=Math.max(1,parseInt(val)||1); 
+  updateSubtotal(); 
+}
+
+function updateSubtotal() { 
+  const el=document.getElementById('subtotalVal'); 
+  if(el) el.textContent=formatMoney((parseFloat(customPrice)||0)*qty); 
+}
+
+function addRecord() {
+  let name, price, note;
+  if (recMode==='manual') {
+    name = document.getElementById('manualName').value.trim();
+    price = parseFloat(document.getElementById('manualPrice').value);
+    note = document.getElementById('manualNote').value;
+    qty = parseInt(document.getElementById('manualQty').value)||1;
+    if (!name||isNaN(price)) return showToast('請填寫品名與金額');
+  } else {
+    if (!selectedProduct) return showToast('請選擇品項');
+    name = selectedProduct.name;
+    price = parseFloat(customPrice);
+    if (isNaN(price)||price<=0) return showToast('請輸入金額');
+    note = (document.getElementById('quickNote')||{value:''}).value||'';
+  }
+  
+  records.unshift({ 
+    id:Date.now(), 
+    type:recType, 
+    name, 
+    qty, 
+    price, 
+    total:price*qty, 
+    note, 
+    date:isoToDisplay(sharedDateStr) 
+  });
+  
+  selectedProduct=null; 
+  customPrice=''; 
+  qty=1;
+  
+  if (recMode==='manual') {
+    ['manualName','manualPrice','manualNote'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('manualQty').value=1;
+  }
+  
+  renderProductGrid(); 
+  hidePriceCard();
+  updateHeader(); 
+  renderHistory();
+  if (document.getElementById('tab-monthly').classList.contains('active')) renderMonthly();
+  saveData();
+  showToast('✓ 已記帳');
+}
+
+function updateAddBtn() {
+  const btn = document.getElementById('addBtn');
+  btn.className = `add-btn add-btn-${recType}`;
+  btn.textContent = `記帳 ${CATS[recType].icon}`;
+}
+
+// ============================================
+// 📊 歷史記錄查看
+// ============================================
+
+function renderHistory() {
+  const label = isoToDisplay(sharedDateStr);
+  const filtered = records.filter(r => normalizeDate(r.date) === label);
+  const income = filtered.filter(r=>r.type==='income').reduce((a,b)=>a+b.total,0);
+  const expense = filtered.filter(r=>r.type==='expense').reduce((a,b)=>a+b.total,0);
+  const daily = filtered.filter(r=>r.type==='daily').reduce((a,b)=>a+b.total,0);
+  const net = income-expense-daily;
+  
+  document.getElementById('histNet').textContent = formatMoney(net);
+  document.getElementById('histNet').style.color = net>=0?'#16a34a':'#dc2626';
+  document.getElementById('histIncome').textContent = formatMoney(income);
+  document.getElementById('histExpense').textContent = formatMoney(expense);
+  document.getElementById('histDaily').textContent = formatMoney(daily);
+  
+  const list = document.getElementById('recordList');
+  if (!filtered.length) { 
+    list.innerHTML='<div class="empty-msg">這天沒有帳目</div>'; 
+    return; 
+  }
+  
+  list.innerHTML = filtered.map(r => {
+    const cat = CATS[r.type];
+    return `<div class="record-item">
+<div class="record-icon" style="background:${cat.bg}">${cat.icon}</div>
+<div class="record-info">
+<div class="record-name">${r.name}</div>
+<div class="record-meta">${normalizeDate(r.date)} · ${cat.label} · x${r.qty}${r.note?' · '+r.note:''}</div>
+</div>
+<div class="record-amount">
+<div class="record-val" style="color:${r.type==='income'?'#16a34a':'#ef4444'}">${r.type==='income'?'+':'-'}${formatMoney(r.total)}</div>
+<button class="record-del" onclick="deleteRecord(${r.id})">刪除</button>
+</div>
+</div>`;
+  }).join('');
+}
+
+function deleteRecord(id) { 
+  records=records.filter(r=>r.id!==id); 
+  renderHistory(); 
+  updateHeader(); 
+  saveData(); 
+}
+
+// ============================================
+// 📈 標題欄更新
+// ============================================
+
+function updateHeader() {
+  const label = isoToDisplay(sharedDateStr);
+  const recs = records.filter(r=>normalizeDate(r.date)===label);
+  const income = recs.filter(r=>r.type==='income').reduce((a,b)=>a+b.total,0);
+  const expense = recs.filter(r=>r.type==='expense').reduce((a,b)=>a+b.total,0);
+  const daily = recs.filter(r=>r.type==='daily').reduce((a,b)=>a+b.total,0);
+  const net = income-expense-daily;
+  
+  const hn = document.getElementById('headerNet');
+  const h2 = document.getElementById('hdrNet2');
+  if(hn) { hn.textContent = formatMoney(net); hn.style.color = net>=0?'#4ade80':'#f87171'; }
+  
+  const hi = document.getElementById('hdrIncome');
+  const he = document.getElementById('hdrExpense');
+  const hd = document.getElementById('hdrDaily');
+  if(hi) hi.textContent = formatMoney(income);
+  if(he) he.textContent = formatMoney(expense);
+  if(hd) hd.textContent = formatMoney(daily);
+  if(h2) { h2.textContent = formatMoney(net); h2.style.color = net>=0?'#4ade80':'#f87171'; }
+}
+
+// ============================================
+// 📅 月報功能
+// ============================================
+
+function initMonthStr() {
+  const d = new Date();
+  monthStr = d.getFullYear() + '-' + pad(d.getMonth()+1);
+}
+
+function shiftMonth(delta) {
+  const [y,m] = monthStr.split('-').map(Number);
+  const d = new Date(y, m-1+delta, 1);
+  monthStr = d.getFullYear() + '-' + pad(d.getMonth()+1);
+  renderMonthly();
+}
+
+function renderMonthly() {
+  const [y,m] = monthStr.split('-').map(Number);
+  document.getElementById('monthLabel').textContent = `${y} 年 ${m} 月`;
+  const nowStr = new Date().getFullYear() + '-' + pad(new Date().getMonth()+1);
+  document.getElementById('monthNextBtn').className = monthStr >= nowStr ? 'month-arrow disabled' : 'month-arrow';
+
+  const monthRecs = records.filter(r => displayToYearMonth(normalizeDate(r.date)) === monthStr);
+  const totalIncome = monthRecs.filter(r=>r.type==='income').reduce((a,b)=>a+b.total,0);
+  const totalExpense = monthRecs.filter(r=>r.type==='expense').reduce((a,b)=>a+b.total,0);
+  const totalDaily = monthRecs.filter(r=>r.type==='daily').reduce((a,b)=>a+b.total,0);
+  const totalNet = totalIncome-totalExpense-totalDaily;
+
+  document.getElementById('monthNet').textContent = formatMoney(totalNet);
+  document.getElementById('monthNet').style.color = totalNet>=0?'#4ade80':'#f87171';
+  document.getElementById('monthIncome').textContent = formatMoney(totalIncome);
+  document.getElementById('monthExpense').textContent = formatMoney(totalExpense);
+  document.getElementById('monthDaily').textContent = formatMoney(totalDaily);
+
+  const dayMap = {};
+  monthRecs.forEach(r => { 
+    const d = normalizeDate(r.date);
+    if (!dayMap[d]) dayMap[d]=[]; 
+    dayMap[d].push(r); 
+  });
+  
+  const days = Object.keys(dayMap).sort((a,b) => {
+    const ms = s => { const [y,m,d]=s.split('/'); return new Date(y,m-1,d).getTime(); };
+    return ms(b)-ms(a);
+  });
+
+  const list = document.getElementById('monthDayList');
+  if (!days.length) { 
+    list.innerHTML='<div class="month-empty">這個月還沒有帳目</div>'; 
+    return; 
+  }
+  
+  const weekdays = ['日','一','二','三','四','五','六'];
+  list.innerHTML = days.map(date => {
+    const recs = dayMap[date];
+    const inc = recs.filter(r=>r.type==='income').reduce((a,b)=>a+b.total,0);
+    const exp = recs.filter(r=>r.type==='expense').reduce((a,b)=>a+b.total,0);
+    const dal = recs.filter(r=>r.type==='daily').reduce((a,b)=>a+b.total,0);
+    const net = inc-exp-dal;
+    const [dy,dm,dd] = date.split('/');
+    const wd = weekdays[new Date(parseInt(dy),parseInt(dm)-1,parseInt(dd)).getDay()];
+    return `<div class="month-day-item" onclick="goToDay('${date}')">
+<div class="month-day-header">
+<div class="month-day-date">${parseInt(dm)}/${parseInt(dd)} (${wd})</div>
+<div class="month-day-net" style="color:${net>=0?'#16a34a':'#ef4444'}">${net>=0?'+':''}${formatMoney(net)}</div>
+</div>
+<div class="month-day-bar">
+${inc>0?`<span class="month-day-bar-item income">↑${formatMoney(inc)}</span>`:''}
+${exp>0?`<span class="month-day-bar-item expense">↓${formatMoney(exp)}</span>`:''}
+${dal>0?`<span class="month-day-bar-item daily">◆${formatMoney(dal)}</span>`:''}
+<span class="month-day-bar-item" style="margin-left:auto">${recs.length} 筆</span>
+</div>
+</div>`;
+  }).join('');
+}
+
+function goToDay(dateLabel) {
+  const parts = dateLabel.split('/');
+  setDate(parts[0] + '-' + pad(parseInt(parts[1])) + '-' + pad(parseInt(parts[2])));
+  switchTab('history');
+}
+
+// ============================================
+// 📦 品項管理
+// ============================================
+
+function setProdType(type) {
+  newProdType = type;
+  document.querySelectorAll('.prod-type-btn').forEach(b => b.className='prod-type-btn');
+  document.querySelectorAll('.prod-type-btn')[{income:0,expense:1,daily:2}[type]].className=`prod-type-btn active-${type}`;
+}
+
+function addProduct() {
+  const name = document.getElementById('newProdName').value.trim();
+  const priceVal = document.getElementById('newProdPrice').value.trim();
+  if (!name) return showToast('請填品名');
+  
+  const defaultPrice = priceVal ? parseFloat(priceVal) : null;
+  
+  products[newProdType].push({ 
+    id: Date.now(), 
+    name,
+    defaultPrice
+  });
+  
+  document.getElementById('newProdName').value = '';
+  document.getElementById('newProdPrice').value = '';
+  renderProductSections(); 
+  renderProductGrid();
+  
+  localStorage.setItem('bk_products', JSON.stringify(products));
+  uploadToCloud(true);
+  
+  log('✓ 新增品項：' + name);
+  showToast('✓ 已新增品項');
+}
+
+function deleteProduct(type, id) {
+  const prodName = products[type].find(p => p.id === id)?.name || '未知品項';
+  products[type] = products[type].filter(p => p.id !== id);
+  renderProductSections(); 
+  renderProductGrid();
+  
+  localStorage.setItem('bk_products', JSON.stringify(products));
+  uploadToCloud(true);
+  
+  log('✓ 刪除品項：' + prodName);
+  showToast('✓ 已刪除品項');
+}
+
+function editProduct(type, id) {
+  // 取消其他編輯中的品項
+  document.querySelectorAll('.prod-item.editing').forEach(el => {
+    const pid = parseInt(el.dataset.id);
+    const ptype = el.dataset.type;
+    cancelEdit(ptype, pid);
+  });
+  
+  const item = document.querySelector(`.prod-item[data-id="${id}"]`);
+  if (!item) return;
+  const prod = products[type].find(p => p.id === id);
+  if (!prod) return;
+  
+  const cat = CATS[type];
+  item.classList.add('editing');
+  item.innerHTML = `
+    <input class="prod-edit-name" id="editName_${id}" type="text" value="${prod.name}" placeholder="品項名稱" />
+    <input class="prod-edit-price prod-edit-price-${type}" id="editPrice_${id}" type="number" value="${prod.defaultPrice ?? ''}" placeholder="金額" inputmode="numeric" style="border-color:${cat.color}" />
+    <div class="prod-edit-actions">
+      <button class="prod-save-btn" onclick="saveProduct('${type}',${id})" style="background:${cat.color}">儲存</button>
+      <button class="prod-cancel-btn" onclick="cancelEdit('${type}',${id})">取消</button>
+      <button class="prod-cancel-btn" onclick="deleteProduct('${type}',${id})" style="color:#ef4444;border-color:#fca5a5">刪除</button>
+    </div>`;
+  item.querySelector(`#editName_${id}`).focus();
+}
+
+function cancelEdit(type, id) {
+  renderProductSections();
+}
+
+function saveProduct(type, id) {
+  const nameEl = document.getElementById(`editName_${id}`);
+  const priceEl = document.getElementById(`editPrice_${id}`);
+  if (!nameEl) return;
+  
+  const newName = nameEl.value.trim();
+  if (!newName) return showToast('請填品名');
+  
+  const newPrice = priceEl && priceEl.value.trim() ? parseFloat(priceEl.value) : null;
+  
+  const prod = products[type].find(p => p.id === id);
+  if (prod) {
+    prod.name = newName;
+    prod.defaultPrice = newPrice;
+  }
+  
+  renderProductSections();
+  renderProductGrid();
+  localStorage.setItem('bk_products', JSON.stringify(products));
+  uploadToCloud(true);
+  showToast('✓ 已儲存');
+}
+
+function renderProductSections() {
+  document.getElementById('productSections').innerHTML = Object.entries(CATS).map(([type, cat]) => `
+<div class="prod-section">
+<div class="prod-section-title" style="color:${cat.color}">${cat.icon} ${cat.label}</div>
+<div class="prod-list">
+${products[type].map(p=>`
+<div class="prod-item" data-id="${p.id}" data-type="${type}">
+<span class="prod-item-name">${p.name}</span>
+<span class="prod-item-price">${p.defaultPrice != null ? 'NT$' + p.defaultPrice.toLocaleString() : '<span style="color:#e2e8f0">—</span>'}</span>
+<button class="prod-edit-btn" onclick="editProduct('${type}',${p.id})">✎</button>
+<button class="prod-del-btn" onclick="deleteProduct('${type}',${p.id})">✕</button>
+</div>`).join('')}
+</div>
+</div>`).join('');
+}
+
+// ============================================
+// 🚀 初始化
+// ============================================
+
+function init() {
+  log("系統啟動中...");
+  loadData();
+  initMonthStr();
+  setDate(todayISO());
+  renderProductGrid();
+  updateAddBtn();
+  
+  setTimeout(() => {
+    log("開始從雲端載入...");
+    loadFromCloud();
+  }, 500);
+  
+  log("✓ 初始化完成");
+}
+
+init();
+</script>
+</body>
+</html>
